@@ -645,8 +645,6 @@ class ORTTrainer(Trainer):
                     tr_loss_step = self.training_step(model, inputs)
                 
                 step_time = (time.time() - start) * 1000
-                print('Step', step, ':', tr_loss_step)
-                print(f"Step {step}: {step_time:.5f} ms")
                 if step >= steps_in_epoch // 2:
                     avg += step_time
 
