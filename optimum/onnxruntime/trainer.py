@@ -614,8 +614,12 @@ class ORTTrainer(Trainer):
                 self._load_rng_state(resume_from_checkpoint)
 
             step = -1
+            avg_fwbw = 0.0
+            avg_optm = 0.0
+            avg_total = 0.0
             avg = 0.0
             for step, inputs in enumerate(train_dataloader):
+                iteration_start = time.time()
                 # Skip past any already trained steps if resuming training
                 if steps_trained_in_current_epoch > 0:
                     steps_trained_in_current_epoch -= 1
@@ -643,12 +647,6 @@ class ORTTrainer(Trainer):
                         tr_loss_step = self.training_step(model, inputs)
                 else:
                     tr_loss_step = self.training_step(model, inputs)
-                
-                step_time = (time.time() - start) * 1000
-                print('Step', step, ':', tr_loss_step)
-                print(f"Step {step}: {step_time:.5f} ms")
-                if step >= steps_in_epoch // 2:
-                    avg += step_time
 
                 if (
                     args.logging_nan_inf_filter
@@ -661,8 +659,16 @@ class ORTTrainer(Trainer):
                     tr_loss += tr_loss_step
 
                 self.current_flos += float(self.floating_point_ops(inputs))
+                
+                step_time = (time.time() - start) * 1000
+                if args.local_rank == 0:
+                    print(f"FWBW {step}: {step_time:.5f} ms")
+                avg_fwbw += step_time
+                if step >= steps_in_epoch // 2:
+                    avg += step_time
 
                 # Optimizer step for deepspeed must be called on every step regardless of the value of gradient_accumulation_steps
+                start = time.time()
                 if self.deepspeed:
                     self.deepspeed.step()
 
@@ -720,11 +726,25 @@ class ORTTrainer(Trainer):
                     self._maybe_log_save_evaluate(tr_loss, model, trial, epoch, ignore_keys_for_eval)
                 else:
                     self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
+                    
+                step_time = (time.time() - start) * 1000
+                if args.local_rank == 0:
+                    print(f"optimizer {step}: {step_time:.5f} ms")
+                avg_optm += step_time
+
+                step_time = (time.time() - iteration_start) * 1000
+                if args.local_rank == 0:
+                    print(f"iteration {step}: {step_time:.5f} ms")
+                avg_total += step_time
 
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
             
-            print(f"Avg of 2nd half: {(avg / (steps_in_epoch - steps_in_epoch // 2)):.5f} ms")
+            if args.local_rank == 0:
+                print(f"Avg of 2nd half: {(avg / (steps_in_epoch - steps_in_epoch // 2)):.5f} ms")
+                print(f"Avg of FW+BW: {(avg_fwbw / steps_in_epoch):.5f} ms")
+                print(f"Avg of optimizer: {(avg_optm / steps_in_epoch):.5f} ms")
+                print(f"Avg of iteration: {(avg_total / steps_in_epoch):.5f} ms")
             
             if step < 0:
                 logger.warning(
