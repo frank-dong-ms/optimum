@@ -661,8 +661,8 @@ class ORTTrainer(Trainer):
                 self.current_flos += float(self.floating_point_ops(inputs))
                 
                 step_time = (time.time() - start) * 1000
-                #if args.local_rank == 0:
-                #    print(f"FWBW {step}: {step_time:.5f} ms")
+                if args.local_rank == 0:
+                    print(f"FWBW {step}: {step_time:.5f} ms")
                 avg_fwbw += step_time
                 if step >= steps_in_epoch // 2:
                     avg += step_time
@@ -728,13 +728,13 @@ class ORTTrainer(Trainer):
                     self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
                     
                 step_time = (time.time() - start) * 1000
-                #if args.local_rank == 0:
-                #    print(f"optimizer {step}: {step_time:.5f} ms")
+                if args.local_rank == 0:
+                    print(f"optimizer {step}: {step_time:.5f} ms")
                 avg_optm += step_time
 
                 step_time = (time.time() - iteration_start) * 1000
-                #if args.local_rank == 0:
-                #    print(f"iteration {step}: {step_time:.5f} ms")
+                if args.local_rank == 0:
+                    print(f"iteration {step}: {step_time:.5f} ms")
                 avg_total += step_time
 
                 if self.control.should_epoch_stop or self.control.should_training_stop:
